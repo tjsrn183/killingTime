@@ -13,8 +13,8 @@
       <span class="ring r3"></span>
     </div>
     <div class="content">
-      <h1 class="title">박종현씨 </h1>
-      <p class="subtitle">뭐하고있으세요</p>
+      <h1 class="title">토요일은 지옥의 하체데이 </h1>
+      <p class="subtitle">with 정구준</p>
     </div>
   </div>
 </template>
