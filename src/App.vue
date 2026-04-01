@@ -1,189 +1,486 @@
 <template>
-  <div id="app" class="stage">
-    <div class="bg-gradient"></div>
-    <div class="stars"></div>
-    <div class="orbs">
-      <span class="orb o1"></span>
-      <span class="orb o2"></span>
-      <span class="orb o3"></span>
-    </div>
-    <div class="rings">
-      <span class="ring r1"></span>
-      <span class="ring r2"></span>
-      <span class="ring r3"></span>
-    </div>
-    <div class="content">
-      <h1 class="title">토요일은 지옥의 하체데이 </h1>
-      <p class="subtitle">with 정구준</p>
-    </div>
+  <div class="app-shell">
+    <div class="screen-glow"></div>
+    <main class="card">
+      <header class="header">
+        <span class="badge">DEMO ONLY</span>
+        <h1>링크 송금받기 데모</h1>
+        <p>카카오톡처럼 링크는 공유되지만 실제 송금은 일어나지 않습니다.</p>
+      </header>
+
+      <section v-if="isPayPage" class="panel">
+        <div v-if="payState === 'not-found'" class="status error">
+          <h2>유효하지 않은 링크</h2>
+          <p>링크가 없거나 만료되었습니다. 새 링크를 요청해주세요.</p>
+        </div>
+
+        <div v-else-if="payState === 'done'" class="status done">
+          <h2>수락 완료</h2>
+          <p>가짜 송금 수락이 처리되었습니다.</p>
+          <button class="btn secondary" @click="goToCreate">새 링크 만들기</button>
+        </div>
+
+        <div v-else class="pay-info">
+          <h2>{{ payRequest.receiverName }}님에게 보낼 링크</h2>
+          <p class="amount">{{ formatAmount(payRequest.amount) }}원</p>
+          <p class="message">메시지: {{ payRequest.message || '없음' }}</p>
+          <p class="meta">만료: {{ formatDate(payRequest.expiresAt) }}</p>
+          <button class="btn primary" @click="mockAcceptPayment">가짜 송금 수락</button>
+          <button class="btn secondary" @click="goToCreate">나도 링크 만들기</button>
+        </div>
+      </section>
+
+      <section v-else class="panel">
+        <h2>송금 링크 생성</h2>
+        <form class="form" @submit.prevent="createPaymentLink">
+          <label>
+            받는 사람 이름
+            <input v-model.trim="form.receiverName" type="text" maxlength="20" required />
+          </label>
+          <label>
+            금액 (원)
+            <input
+              v-model.number="form.amount"
+              type="number"
+              min="1000"
+              step="1000"
+              required
+            />
+          </label>
+          <label>
+            메시지
+            <input v-model.trim="form.message" type="text" maxlength="60" placeholder="예: 커피값 고마워!" />
+          </label>
+          <label>
+            만료 시간 (시간)
+            <input v-model.number="form.expireHours" type="number" min="1" max="168" required />
+          </label>
+          <button class="btn primary" type="submit">링크 만들기</button>
+        </form>
+
+        <div v-if="latestLink" class="result">
+          <p>생성된 링크</p>
+          <a :href="latestLink" class="link">{{ latestLink }}</a>
+          <div class="actions">
+            <button class="btn secondary" @click="copyLink">링크 복사</button>
+            <button class="btn secondary" @click="shareBySystem">공유하기</button>
+          </div>
+        </div>
+
+        <div v-if="history.length" class="history">
+          <h3>최근 생성 링크</h3>
+          <ul>
+            <li v-for="item in history" :key="item.token">
+              <a :href="buildPayUrl(item.token)">{{ item.receiverName }} · {{ formatAmount(item.amount) }}원</a>
+              <span>{{ item.status }}</span>
+            </li>
+          </ul>
+        </div>
+      </section>
+    </main>
   </div>
 </template>
 
 <script>
+const STORAGE_KEY = 'mock-payment-links-v1'
+
+function randomHex(size) {
+  if (window.crypto && window.crypto.getRandomValues) {
+    const bytes = new Uint8Array(size)
+    window.crypto.getRandomValues(bytes)
+    return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')
+  }
+  return Math.random().toString(16).slice(2) + Date.now().toString(16)
+}
+
+function parsePathToken() {
+  const parts = window.location.pathname.split('/').filter(Boolean)
+  if (parts.length === 2 && parts[0] === 'pay') return parts[1]
+  const queryToken = new URLSearchParams(window.location.search).get('token')
+  return queryToken || ''
+}
+
 export default {
-  name: 'App'
+  name: 'App',
+  data() {
+    return {
+      form: {
+        receiverName: '',
+        amount: 10000,
+        message: '',
+        expireHours: 24
+      },
+      latestLink: '',
+      history: [],
+      isPayPage: false,
+      payState: 'active',
+      payRequest: null
+    }
+  },
+  mounted() {
+    this.history = this.loadLinks()
+    const token = parsePathToken()
+    this.isPayPage = Boolean(token)
+    if (this.isPayPage) this.loadPayRequest(token)
+  },
+  methods: {
+    loadLinks() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+      } catch (error) {
+        return []
+      }
+    },
+    saveLinks(links) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(links))
+      this.history = links
+    },
+    buildPayUrl(token) {
+      return `${window.location.origin}/pay/${token}`
+    },
+    createPaymentLink() {
+      if (!this.form.receiverName || !this.form.amount || this.form.amount < 1000) return
+      const token = randomHex(16)
+      const expiresAt = Date.now() + this.form.expireHours * 60 * 60 * 1000
+      const newItem = {
+        token,
+        receiverName: this.form.receiverName,
+        amount: Number(this.form.amount),
+        message: this.form.message,
+        expiresAt,
+        status: 'PENDING',
+        createdAt: Date.now()
+      }
+      const nextLinks = [newItem, ...this.loadLinks()].slice(0, 20)
+      this.saveLinks(nextLinks)
+      this.latestLink = this.buildPayUrl(token)
+    },
+    loadPayRequest(token) {
+      const target = this.loadLinks().find((item) => item.token === token)
+      if (!target) {
+        this.payState = 'not-found'
+        return
+      }
+      if (Date.now() > target.expiresAt) {
+        this.payState = 'not-found'
+        return
+      }
+      if (target.status === 'DONE') {
+        this.payState = 'done'
+      } else {
+        this.payState = 'active'
+      }
+      this.payRequest = target
+    },
+    mockAcceptPayment() {
+      if (!this.payRequest) return
+      const links = this.loadLinks().map((item) => {
+        if (item.token !== this.payRequest.token) return item
+        return { ...item, status: 'DONE' }
+      })
+      this.saveLinks(links)
+      this.payRequest = { ...this.payRequest, status: 'DONE' }
+      this.payState = 'done'
+    },
+    async copyLink() {
+      if (!this.latestLink) return
+      await navigator.clipboard.writeText(this.latestLink)
+      window.alert('링크를 복사했습니다. 카카오톡에 붙여넣어 공유하세요.')
+    },
+    async shareBySystem() {
+      if (!this.latestLink) return
+      if (navigator.share) {
+        await navigator.share({
+          title: '송금 요청 링크 (데모)',
+          text: '실제 송금은 되지 않는 데모 링크입니다.',
+          url: this.latestLink
+        })
+        return
+      }
+      await this.copyLink()
+    },
+    goToCreate() {
+      window.location.href = window.location.origin
+    },
+    formatAmount(value) {
+      return new Intl.NumberFormat('ko-KR').format(value || 0)
+    },
+    formatDate(value) {
+      return new Intl.DateTimeFormat('ko-KR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(value)
+    }
+  }
 }
 </script>
 
 <style>
-#app.stage {
-  position: relative;
-  height: 100vh;
-  width: 100%;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #050510;
-  color: #fff;
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+:root {
+  --bg: #f5efe5;
+  --ink: #2f2721;
+  --ink-soft: #685d54;
+  --line: #d6c9bb;
+  --card: rgba(255, 251, 245, 0.92);
+  --accent: #ff7f3e;
+  --accent-deep: #d55814;
 }
 
-.bg-gradient {
-  position: absolute;
-  inset: -20vmin;
-  background:
-    radial-gradient(40vmin 40vmin at 20% 25%, rgba(255, 0, 153, 0.45), transparent 60%),
-    radial-gradient(35vmin 35vmin at 80% 30%, rgba(0, 200, 255, 0.40), transparent 60%),
-    radial-gradient(45vmin 45vmin at 30% 80%, rgba(255, 255, 0, 0.30), transparent 60%),
-    radial-gradient(50vmin 50vmin at 75% 75%, rgba(124, 0, 255, 0.35), transparent 60%),
-    linear-gradient(120deg, #0b0b1d 0%, #0a0320 50%, #000 100%);
-  filter: saturate(125%);
-  animation: hue 16s linear infinite;
+* {
+  box-sizing: border-box;
 }
 
-.stars {
-  position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(2px 2px at 10% 20%, rgba(255,255,255,0.8), transparent 60%),
-    radial-gradient(1px 1px at 30% 80%, rgba(255,255,255,0.7), transparent 60%),
-    radial-gradient(1.5px 1.5px at 60% 10%, rgba(255,255,255,0.9), transparent 60%),
-    radial-gradient(1.25px 1.25px at 80% 60%, rgba(255,255,255,0.85), transparent 60%),
-    radial-gradient(1px 1px at 50% 50%, rgba(255,255,255,0.9), transparent 60%),
-    radial-gradient(2px 2px at 15% 65%, rgba(255,255,255,0.75), transparent 60%),
-    radial-gradient(1.25px 1.25px at 85% 40%, rgba(255,255,255,0.8), transparent 60%);
-  animation: twinkle 3.5s ease-in-out infinite;
-  opacity: 0.9;
-}
-
-.orbs {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.orb {
-  position: absolute;
-  width: 45vmin;
-  height: 45vmin;
-  border-radius: 50%;
-  filter: blur(25px) saturate(140%);
-  mix-blend-mode: screen;
-  animation: float 10s ease-in-out infinite;
-}
-.orb.o1 {
-  left: -10vmin;
-  top: 5vmin;
-  background: radial-gradient(circle at 30% 30%, rgba(255, 90, 160, 0.8), rgba(255, 90, 160, 0.05));
-  animation-duration: 13s;
-}
-.orb.o2 {
-  right: -8vmin;
-  top: 35vmin;
-  background: radial-gradient(circle at 70% 30%, rgba(0, 210, 255, 0.8), rgba(0, 210, 255, 0.05));
-  animation-duration: 11s;
-  animation-delay: -2s;
-}
-.orb.o3 {
-  left: 30vmin;
-  bottom: -10vmin;
-  background: radial-gradient(circle at 50% 50%, rgba(220, 255, 0, 0.8), rgba(220, 255, 0, 0.05));
-  animation-duration: 15s;
-  animation-delay: -4s;
-}
-
-.rings { position: absolute; inset: 0; pointer-events: none; }
-.ring {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.18);
-  box-shadow:
-    0 0 25px rgba(255,255,255,0.08),
-    inset 0 0 60px rgba(255,255,255,0.06);
-  backdrop-filter: blur(1px);
-}
-.ring.r1 { width: 70vmin; height: 70vmin; animation: spin 24s linear infinite; }
-.ring.r2 { width: 52vmin; height: 52vmin; animation: spinReverse 18s linear infinite; }
-.ring.r3 { width: 34vmin; height: 34vmin; animation: spin 12s linear infinite; }
-
-.content {
-  position: relative;
-  z-index: 2;
-  text-align: center;
-}
-
-.title {
-  font-size: clamp(54px, 12vmin, 160px);
-  line-height: 1.05;
+body {
   margin: 0;
-  letter-spacing: 2px;
-  background: linear-gradient( -45deg,
-    #ff9a9e 0%, #fad0c4 20%, #fbc2eb 40%, #a6c0fe 60%, #42e695 80%, #f68084 100%);
-  background-size: 300% 300%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  text-shadow: 0 0 20px rgba(255,255,255,0.25), 0 0 40px rgba(255,255,255,0.15);
-  animation: gradientShift 8s ease-in-out infinite, pulse 2.2s ease-in-out infinite;
 }
 
-.subtitle {
-  margin-top: 1rem;
-  font-size: clamp(14px, 2.2vmin, 22px);
-  letter-spacing: 0.4em;
-  text-transform: uppercase;
-  opacity: 0.85;
-  color: rgba(255,255,255,0.9);
-  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.35));
+.app-shell {
+  min-height: 100vh;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 10% 15%, #ffd6a9 0%, transparent 40%),
+    radial-gradient(circle at 85% 85%, #ffc2c2 0%, transparent 35%),
+    linear-gradient(160deg, #f6f1e8 0%, #fbe8d3 45%, #f5eee1 100%);
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+  font-family: "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+  color: var(--ink);
 }
 
-@keyframes hue {
-  0% { filter: hue-rotate(0deg) saturate(120%); }
-  50% { filter: hue-rotate(180deg) saturate(135%); }
-  100% { filter: hue-rotate(360deg) saturate(120%); }
+.screen-glow {
+  position: absolute;
+  width: min(60vw, 620px);
+  height: min(60vw, 620px);
+  border-radius: 999px;
+  background: rgba(255, 127, 62, 0.23);
+  filter: blur(90px);
+  animation: drift 8s ease-in-out infinite;
 }
 
-@keyframes float {
-  0% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-4vmin) scale(1.05); }
-  100% { transform: translateY(0) scale(1); }
+.card {
+  width: min(100%, 760px);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(103, 83, 62, 0.15);
+  padding: 30px;
+  position: relative;
+  z-index: 1;
+  animation: rise 0.55s ease;
 }
 
-@keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
-@keyframes spinReverse { to { transform: translate(-50%, -50%) rotate(-360deg); } }
-
-@keyframes gradientShift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+.header h1 {
+  margin: 10px 0 8px;
+  font-size: clamp(26px, 4vw, 38px);
 }
 
-@keyframes pulse {
-  0%, 100% { text-shadow: 0 0 14px rgba(255,255,255,0.25), 0 0 36px rgba(255,255,255,0.14); }
-  50% { text-shadow: 0 0 26px rgba(255,255,255,0.45), 0 0 64px rgba(255,255,255,0.28); }
+.header p {
+  margin: 0;
+  color: var(--ink-soft);
 }
 
-@keyframes twinkle {
-  0%, 100% { opacity: 0.75; }
-  50% { opacity: 1; }
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #fff;
+  background: var(--accent-deep);
+  padding: 6px 10px;
+  border-radius: 999px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .bg-gradient, .stars, .orb, .ring, .title { animation: none !important; }
+.panel {
+  margin-top: 24px;
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+
+input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 15px;
+  background: #fff;
+}
+
+input:focus {
+  outline: 2px solid rgba(255, 127, 62, 0.3);
+  border-color: var(--accent);
+}
+
+.btn {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn.primary:hover {
+  background: #f16f2d;
+}
+
+.btn.secondary {
+  background: #efe4d7;
+  color: var(--ink);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.result {
+  margin-top: 20px;
+  border: 1px dashed #d4b89d;
+  border-radius: 14px;
+  padding: 14px;
+  background: #fff6ec;
+}
+
+.result p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.link {
+  display: block;
+  margin-bottom: 12px;
+  color: #204d8a;
+  word-break: break-all;
+}
+
+.history {
+  margin-top: 22px;
+}
+
+.history ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.history li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fffcf7;
+}
+
+.history span {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.status {
+  padding: 22px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+}
+
+.status.error {
+  background: #fff2ef;
+  border-color: #f5c3bb;
+}
+
+.status.done {
+  background: #eef9ef;
+  border-color: #bde3bf;
+}
+
+.status h2 {
+  margin-top: 0;
+}
+
+.status p {
+  color: var(--ink-soft);
+}
+
+.pay-info {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px;
+  background: #fffdf9;
+  display: grid;
+  gap: 12px;
+}
+
+.pay-info h2 {
+  margin: 0;
+}
+
+.amount {
+  margin: 0;
+  font-size: clamp(32px, 5vw, 46px);
+  font-weight: 800;
+  color: #b94a12;
+}
+
+.message,
+.meta {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate(-10px, 0);
+  }
+  50% {
+    transform: translate(18px, -8px);
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 14px;
+  }
+
+  .card {
+    padding: 20px;
+    border-radius: 18px;
+  }
 }
 </style>
