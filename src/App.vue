@@ -239,10 +239,7 @@ export default {
     },
     async sendFoolMessage() {
       this.kakaoError = ''
-      if (!KAKAO_TEMPLATE_ID) {
-        this.kakaoError = '환경변수 VUE_APP_KAKAO_TEMPLATE_ID 가 설정되지 않았습니다.'
-        return
-      }
+    
       if (!this.kakaoReady) {
         await this.ensureKakaoSdk()
       }
