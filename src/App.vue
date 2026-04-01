@@ -133,10 +133,7 @@ export default {
   },
   methods: {
     async ensureKakaoSdk() {
-      if (!KAKAO_JS_KEY) {
-        this.kakaoError = '환경변수 VUE_APP_KAKAO_JS_KEY 가 설정되지 않았습니다.'
-        return
-      }
+    
       if (window.Kakao && window.Kakao.isInitialized && window.Kakao.isInitialized()) {
         this.kakaoReady = true
         return
