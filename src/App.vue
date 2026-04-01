@@ -31,7 +31,18 @@
       </section>
 
       <section v-else class="panel">
-        <h2>송금 링크 생성</h2>
+        <div class="quick-share">
+          <h2>카카오톡 템플릿 바로 보내기</h2>
+          <p>
+            카톡에 보이는 "송금하기" 스타일 메시지는 이 페이지가 아니라 카카오 메시지 템플릿에서 결정됩니다.
+          </p>
+          <div class="actions">
+            <button class="btn kakao" @click="sendFoolMessage">카카오톡으로 공유하기</button>
+          </div>
+          <p v-if="kakaoError" class="kakao-error">{{ kakaoError }}</p>
+        </div>
+
+        <h2>송금 링크 생성 (데모)</h2>
         <form class="form" @submit.prevent="createPaymentLink">
           <label>
             받는 사람 이름
@@ -420,6 +431,23 @@ input:focus {
   border-radius: 14px;
   padding: 14px;
   background: #fff6ec;
+}
+
+.quick-share {
+  border: 1px solid #f3d500;
+  background: #fffce5;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 18px;
+}
+
+.quick-share h2 {
+  margin: 0 0 8px;
+}
+
+.quick-share p {
+  margin: 0 0 12px;
+  color: var(--ink-soft);
 }
 
 .result p {
