@@ -10,8 +10,8 @@
 </template>
 
 <script>
-const KAKAO_JS_KEY = process.env.KAKAO_JS_KEY || ''
-const KAKAO_TEMPLATE_ID = Number(process.env.KAKAO_TEMPLATE_ID || 0)
+const KAKAO_JS_KEY = process.env.VUE_APP_KAKAO_JS_KEY || ''
+const KAKAO_TEMPLATE_ID = Number(process.env.VUE_APP_KAKAO_TEMPLATE_ID || 0)
 const KAKAO_SDK_URL = 'https://developers.kakao.com/sdk/js/kakao.js'
 
 export default {
@@ -72,7 +72,7 @@ export default {
       }
 
       if (!KAKAO_TEMPLATE_ID) {
-        this.kakaoError = 'KAKAO_TEMPLATE_ID 환경 변수를 확인해주세요.'
+        this.kakaoError = 'VUE_APP_KAKAO_TEMPLATE_ID 환경 변수를 확인해주세요.'
         return
       }
 
