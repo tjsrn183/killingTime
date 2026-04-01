@@ -85,8 +85,8 @@
 
 <script>
 const STORAGE_KEY = 'mock-payment-links-v1'
-const KAKAO_JS_KEY = 'ca6bf2cf66b31e43e611b69ccab44500'
-const KAKAO_TEMPLATE_ID = 131560
+const KAKAO_JS_KEY = process.env.VUE_APP_KAKAO_JS_KEY || ''
+const KAKAO_TEMPLATE_ID = Number(process.env.VUE_APP_KAKAO_TEMPLATE_ID || 0)
 const KAKAO_SDK_URL = 'https://developers.kakao.com/sdk/js/kakao.js'
 
 function randomHex(size) {
@@ -133,6 +133,10 @@ export default {
   },
   methods: {
     async ensureKakaoSdk() {
+      if (!KAKAO_JS_KEY) {
+        this.kakaoError = '환경변수 VUE_APP_KAKAO_JS_KEY 가 설정되지 않았습니다.'
+        return
+      }
       if (window.Kakao && window.Kakao.isInitialized && window.Kakao.isInitialized()) {
         this.kakaoReady = true
         return
@@ -238,6 +242,10 @@ export default {
     },
     async sendFoolMessage() {
       this.kakaoError = ''
+      if (!KAKAO_TEMPLATE_ID) {
+        this.kakaoError = '환경변수 VUE_APP_KAKAO_TEMPLATE_ID 가 설정되지 않았습니다.'
+        return
+      }
       if (!this.kakaoReady) {
         await this.ensureKakaoSdk()
       }
