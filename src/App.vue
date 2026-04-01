@@ -85,8 +85,8 @@
 
 <script>
 const STORAGE_KEY = 'mock-payment-links-v1'
-const KAKAO_JS_KEY = process.env.VUE_APP_KAKAO_JS_KEY || ''
-const KAKAO_TEMPLATE_ID = Number(process.env.VUE_APP_KAKAO_TEMPLATE_ID || 0)
+const KAKAO_JS_KEY = process.env.KAKAO_JS_KEY || ''
+const KAKAO_TEMPLATE_ID = Number(process.env.KAKAO_TEMPLATE_ID || 0)
 const KAKAO_SDK_URL = 'https://developers.kakao.com/sdk/js/kakao.js'
 
 function randomHex(size) {
