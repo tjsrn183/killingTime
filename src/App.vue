@@ -64,7 +64,9 @@
           <div class="actions">
             <button class="btn secondary" @click="copyLink">링크 복사</button>
             <button class="btn secondary" @click="shareBySystem">공유하기</button>
+            <button class="btn kakao" @click="sendFoolMessage">카카오톡으로 공유하기</button>
           </div>
+          <p v-if="kakaoError" class="kakao-error">{{ kakaoError }}</p>
         </div>
 
         <div v-if="history.length" class="history">
@@ -83,6 +85,9 @@
 
 <script>
 const STORAGE_KEY = 'mock-payment-links-v1'
+const KAKAO_JS_KEY = 'ca6bf2cf66b31e43e611b69ccab44500'
+const KAKAO_TEMPLATE_ID = 131560
+const KAKAO_SDK_URL = 'https://developers.kakao.com/sdk/js/kakao.js'
 
 function randomHex(size) {
   if (window.crypto && window.crypto.getRandomValues) {
@@ -114,16 +119,48 @@ export default {
       history: [],
       isPayPage: false,
       payState: 'active',
-      payRequest: null
+      payRequest: null,
+      kakaoReady: false,
+      kakaoError: ''
     }
   },
-  mounted() {
+  async mounted() {
     this.history = this.loadLinks()
     const token = parsePathToken()
     this.isPayPage = Boolean(token)
     if (this.isPayPage) this.loadPayRequest(token)
+    await this.ensureKakaoSdk()
   },
   methods: {
+    async ensureKakaoSdk() {
+      if (window.Kakao && window.Kakao.isInitialized && window.Kakao.isInitialized()) {
+        this.kakaoReady = true
+        return
+      }
+      try {
+        await new Promise((resolve, reject) => {
+          const existing = document.querySelector(`script[src="${KAKAO_SDK_URL}"]`)
+          if (existing) {
+            existing.addEventListener('load', resolve, { once: true })
+            existing.addEventListener('error', reject, { once: true })
+            if (window.Kakao) resolve()
+            return
+          }
+          const script = document.createElement('script')
+          script.src = KAKAO_SDK_URL
+          script.onload = resolve
+          script.onerror = reject
+          document.head.appendChild(script)
+        })
+        if (!window.Kakao) throw new Error('SDK 로드 실패')
+        if (!window.Kakao.isInitialized()) {
+          window.Kakao.init(KAKAO_JS_KEY)
+        }
+        this.kakaoReady = true
+      } catch (error) {
+        this.kakaoError = '카카오 SDK 초기화에 실패했습니다. 도메인/앱키 설정을 확인해주세요.'
+      }
+    },
     loadLinks() {
       try {
         return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
@@ -198,6 +235,23 @@ export default {
         return
       }
       await this.copyLink()
+    },
+    async sendFoolMessage() {
+      this.kakaoError = ''
+      if (!this.kakaoReady) {
+        await this.ensureKakaoSdk()
+      }
+      if (!window.Kakao || !window.Kakao.Link) {
+        this.kakaoError = '카카오 SDK를 찾을 수 없습니다.'
+        return
+      }
+      try {
+        window.Kakao.Link.sendCustom({
+          templateId: KAKAO_TEMPLATE_ID
+        })
+      } catch (error) {
+        this.kakaoError = '카카오톡 공유 실패: 템플릿 ID 또는 도메인 설정을 확인해주세요.'
+      }
     },
     goToCreate() {
       window.location.href = window.location.origin
@@ -347,6 +401,11 @@ input:focus {
   color: var(--ink);
 }
 
+.btn.kakao {
+  background: #fee500;
+  color: #191919;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -365,6 +424,12 @@ input:focus {
   margin: 0 0 8px;
   font-size: 14px;
   color: var(--ink-soft);
+}
+
+.kakao-error {
+  margin: 12px 0 0;
+  color: #b62600 !important;
+  font-weight: 600;
 }
 
 .link {
